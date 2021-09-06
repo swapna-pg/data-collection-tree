@@ -9,11 +9,23 @@ import (
 )
 
 type DataCollector struct {
-	tree *tree.Tree
+	tree    *tree.Tree
+	channel chan models.InsertParams
 }
 
 func NewDataCollector() *DataCollector {
-	return &DataCollector{tree.NewTree()}
+	return &DataCollector{
+		tree.NewTree(),
+		make(chan models.InsertParams, 20),
+	}
+}
+
+func (data *DataCollector) StartConsuming() {
+	go func() {
+		for record := range data.channel {
+			data.tree.Insert(record)
+		}
+	}()
 }
 
 func (data *DataCollector) Insert(response http.ResponseWriter, request *http.Request) {
@@ -24,7 +36,7 @@ func (data *DataCollector) Insert(response http.ResponseWriter, request *http.Re
 		fmt.Printf("error while parsing insert request: %+v\n", err)
 		response.WriteHeader(http.StatusInternalServerError)
 	} else {
-		data.tree.Insert(reqBody.GetInsertDataParams())
+		data.channel <- reqBody.GetInsertDataParams()
 		message, _ := json.Marshal(map[string]string{"msg": "Inserted successfully"})
 		response.WriteHeader(http.StatusBadRequest)
 		response.Write(message)
